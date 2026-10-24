@@ -1,0 +1,366 @@
+{
+  "version": 2,
+  "users": [
+    {
+      "id": "user-owner",
+      "name": "Shivansh",
+      "email": "shivansh@shopledger.local",
+      "passwordHash": "$2b$10$ZBQUKl4eKiymRGm/nvwbo.xaHgpHDj3Ca8pmPdcXUkG8SXNhoVRN6",
+      "role": "owner",
+      "shopIds": [
+        "shop-1"
+      ],
+      "createdAt": "2026-10-23T23:50:30.512Z"
+    },
+    {
+      "id": "user-1792804549781",
+      "name": "Signup Test User",
+      "email": "signup_1792804549778@shopledger.local",
+      "passwordHash": "$2b$10$mqA25mJNUPHoKpVGRVH5MOlXLm/LVnpwU0Jtr.9WO2RS9oKOwh6K6",
+      "role": "owner",
+      "shopIds": [
+        "shop-1792804549781"
+      ],
+      "createdAt": "2026-10-24T01:15:49.874Z"
+    },
+    {
+      "id": "user-1792805261379",
+      "name": "CORS Test User",
+      "email": "cors-test-1792805261365@shopledger.local",
+      "passwordHash": "$2b$10$JEYDGD3zKS80oJOhXW8mGu2VMlectCVU1xw4slYmIIny3hwirT6pq",
+      "role": "owner",
+      "shopIds": [
+        "shop-1792805261379"
+      ],
+      "createdAt": "2026-10-24T01:27:41.532Z"
+    },
+    {
+      "id": "user-1792805570899",
+      "name": "QA Tester",
+      "email": "qa_1792805570806@example.com",
+      "passwordHash": "$2b$10$Jm/sj5dOhZbkNAPRKElhUuJt/eKA28yFndD7Unp7mW6zFWHR.naji",
+      "role": "owner",
+      "shopIds": [
+        "shop-1792805570899"
+      ],
+      "createdAt": "2026-10-24T01:32:50.989Z"
+    }
+  ],
+  "shops": [
+    {
+      "id": "shop-1",
+      "name": "Shivansh Kirana & General Store",
+      "ownerId": "user-owner",
+      "createdAt": "2026-10-23T23:50:30.513Z",
+      "products": [
+        {
+          "id": "p1",
+          "name": "Amul Milk (1L)",
+          "category": "Dairy",
+          "purchasePrice": 50,
+          "sellingPrice": 60,
+          "stock": 119,
+          "lowStockThreshold": 20,
+          "unit": "packet"
+        },
+        {
+          "id": "p2",
+          "name": "Maggi (70g)",
+          "category": "Snacks",
+          "purchasePrice": 10,
+          "sellingPrice": 14,
+          "stock": 198,
+          "lowStockThreshold": 30,
+          "unit": "pack"
+        },
+        {
+          "id": "p3",
+          "name": "Parle-G (100g)",
+          "category": "Snacks",
+          "purchasePrice": 8,
+          "sellingPrice": 10,
+          "stock": 150,
+          "lowStockThreshold": 25,
+          "unit": "pack"
+        },
+        {
+          "id": "p4",
+          "name": "Coca Cola (500ml)",
+          "category": "Beverages",
+          "purchasePrice": 30,
+          "sellingPrice": 40,
+          "stock": 79,
+          "lowStockThreshold": 15,
+          "unit": "bottle"
+        },
+        {
+          "id": "p5",
+          "name": "Lay's Chips (52g)",
+          "category": "Snacks",
+          "purchasePrice": 18,
+          "sellingPrice": 25,
+          "stock": 10,
+          "lowStockThreshold": 20,
+          "unit": "packet"
+        },
+        {
+          "id": "p6",
+          "name": "Dove Soap (100g)",
+          "category": "Personal Care",
+          "purchasePrice": 28,
+          "sellingPrice": 40,
+          "stock": 5,
+          "lowStockThreshold": 10,
+          "unit": "bar"
+        }
+      ],
+      "customers": [
+        {
+          "id": "c1",
+          "name": "Ramesh Kumar",
+          "phone": "9876543210",
+          "location": "Shop #4, Near Old Post Office, Gandhi Market, Gurugram",
+          "totalPurchases": 12450,
+          "pendingAmount": 500,
+          "status": "Active",
+          "lastVisit": "2026-10-23"
+        },
+        {
+          "id": "c2",
+          "name": "Suresh Patel",
+          "phone": "9123456789",
+          "location": "House 19, Sector 15 Near Civil Hospital, Gurugram",
+          "totalPurchases": 8200,
+          "pendingAmount": 0,
+          "status": "Active",
+          "lastVisit": "2026-10-22"
+        },
+        {
+          "id": "c3",
+          "name": "Amit Sharma",
+          "phone": "9988776655",
+          "location": "Krishna Tea Stall, Bus Stand Road, Gurugram",
+          "totalPurchases": 5728,
+          "pendingAmount": 1200,
+          "status": "Active",
+          "lastVisit": "2026-10-24"
+        }
+      ],
+      "sales": [
+        {
+          "id": "BILL-1792809058842-5A7E9B",
+          "date": "2026-10-24",
+          "time": "08:00 am",
+          "customerId": "c3",
+          "customerName": "Amit Sharma",
+          "customerPhone": "9988776655",
+          "customerLocation": "Krishna Tea Stall, Bus Stand Road, Gurugram",
+          "items": [
+            {
+              "id": "bi-59803689ea03-0",
+              "productId": "p2",
+              "name": "Maggi (70g)",
+              "price": 14,
+              "qty": 2,
+              "total": 28
+            },
+            {
+              "id": "bi-522d03fb7ed3-1",
+              "productId": "p4",
+              "name": "Coca Cola (500ml)",
+              "price": 40,
+              "qty": 1,
+              "total": 40
+            },
+            {
+              "id": "bi-f611cae1e810-2",
+              "productId": "p1",
+              "name": "Amul Milk (1L)",
+              "price": 60,
+              "qty": 1,
+              "total": 60
+            }
+          ],
+          "subtotal": 128,
+          "total": 128,
+          "paymentMode": "Cash",
+          "status": "Paid",
+          "createdBy": "user-owner",
+          "idempotencyKey": "2ef9dba4-8961-47de-a6a6-8c68bdc37f51"
+        },
+        {
+          "id": "BILL-1049",
+          "date": "2026-10-23",
+          "time": "14:20",
+          "customerId": "c3",
+          "customerName": "Amit Sharma",
+          "customerPhone": "9988776655",
+          "customerLocation": "Krishna Tea Stall, Bus Stand Road, Gurugram",
+          "items": [
+            {
+              "id": "bi1",
+              "productId": "p2",
+              "name": "Maggi (70g)",
+              "price": 14,
+              "qty": 2,
+              "total": 28
+            },
+            {
+              "id": "bi2",
+              "productId": "p4",
+              "name": "Coca Cola (500ml)",
+              "price": 40,
+              "qty": 1,
+              "total": 40
+            }
+          ],
+          "subtotal": 68,
+          "total": 68,
+          "paymentMode": "Cash",
+          "status": "Paid",
+          "createdBy": "user-owner"
+        }
+      ],
+      "receipts": [
+        {
+          "id": "rcpt-1",
+          "vendor": "Hindustan Unilever Ltd Wholesale",
+          "date": "2026-10-23",
+          "receiptNumber": "HUL-INV-88912",
+          "category": "Inventory Restock",
+          "items": [
+            {
+              "name": "Dove Cream Bar 100g (Pack of 24)",
+              "qty": 2,
+              "unitPrice": 672,
+              "total": 1344
+            },
+            {
+              "name": "Surf Excel Easy Wash 1kg (Pack of 12)",
+              "qty": 1,
+              "unitPrice": 1380,
+              "total": 1380
+            }
+          ],
+          "total": 2724,
+          "type": "computer",
+          "paymentStatus": "Paid",
+          "source": "pdf",
+          "notes": "Computerized GST distributor invoice scanned.",
+          "createdAt": "2026-10-23T23:50:30.513Z"
+        }
+      ],
+      "suppliers": [
+        {
+          "id": "sup-1",
+          "name": "Hindustan Unilever Ltd",
+          "contactName": "Ajay Mehta",
+          "phone": "9811122233",
+          "location": "Industrial Area, Gurugram",
+          "category": "FMCG",
+          "outstandingBalance": 15000,
+          "lastOrderDate": "2026-10-21",
+          "status": "Active"
+        },
+        {
+          "id": "sup-2",
+          "name": "Shree Ganesh Traders",
+          "contactName": "Rohit Verma",
+          "phone": "9898989898",
+          "location": "Old City, Gurugram",
+          "category": "Snacks",
+          "outstandingBalance": 4800,
+          "lastOrderDate": "2026-10-18",
+          "status": "Active"
+        }
+      ],
+      "expenses": [
+        {
+          "id": "exp-1",
+          "title": "Monthly electricity bill",
+          "category": "Utilities",
+          "amount": 2200,
+          "vendor": "Dakshin Haryana Bijli",
+          "date": "2026-10-22",
+          "notes": "Shop power and refrigeration load",
+          "createdBy": "user-owner"
+        },
+        {
+          "id": "exp-2",
+          "title": "Packaging and carry bags",
+          "category": "Operations",
+          "amount": 640,
+          "vendor": "Local print vendor",
+          "date": "2026-10-20",
+          "notes": "High-volume pouch restock",
+          "createdBy": "user-owner"
+        }
+      ],
+      "purchases": [],
+      "employees": [],
+      "payrollPayments": [],
+      "auditLogs": [
+        {
+          "id": "audit-ad96cfc88c216bd0",
+          "actorId": "user-owner",
+          "action": "sale.created",
+          "entityId": "BILL-1792809058842-5A7E9B",
+          "createdAt": "2026-10-24T02:30:58.855Z",
+          "details": "total:128"
+        }
+      ],
+      "supplierPayments": []
+    },
+    {
+      "id": "shop-1792804549781",
+      "name": "Signup Test Shop",
+      "ownerId": "user-1792804549781",
+      "createdAt": "2026-10-24T01:15:49.874Z",
+      "products": [],
+      "customers": [],
+      "sales": [],
+      "receipts": [],
+      "suppliers": [],
+      "expenses": [],
+      "purchases": [],
+      "employees": [],
+      "payrollPayments": [],
+      "auditLogs": [],
+      "supplierPayments": []
+    },
+    {
+      "id": "shop-1792805261379",
+      "name": "CORS Test Shop",
+      "ownerId": "user-1792805261379",
+      "createdAt": "2026-10-24T01:27:41.532Z",
+      "products": [],
+      "customers": [],
+      "sales": [],
+      "receipts": [],
+      "suppliers": [],
+      "expenses": [],
+      "purchases": [],
+      "employees": [],
+      "payrollPayments": [],
+      "auditLogs": [],
+      "supplierPayments": []
+    },
+    {
+      "id": "shop-1792805570899",
+      "name": "QA Shop",
+      "ownerId": "user-1792805570899",
+      "createdAt": "2026-10-24T01:32:50.989Z",
+      "products": [],
+      "customers": [],
+      "sales": [],
+      "receipts": [],
+      "suppliers": [],
+      "expenses": [],
+      "purchases": [],
+      "employees": [],
+      "payrollPayments": [],
+      "auditLogs": [],
+      "supplierPayments": []
+    }
+  ]
+}

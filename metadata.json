@@ -1,0 +1,6 @@
+{
+  "name": "ShopLedger",
+  "description": "AI-powered receipt management and expense ledger that converts paper receipts into verified business records, flags extraction anomalies, detects duplicate receipts, and produces evidence-grounded financial summaries.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
