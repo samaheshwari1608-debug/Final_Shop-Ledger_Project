@@ -24,7 +24,7 @@ export interface Customer {
   id: string;
   name: string;
   phone: string;
-  location: string; // Customer shop or residence location
+  location: string; // Customer address or location
   totalPurchases: number; // in ₹
   pendingAmount: number;  // in ₹ (Udhaar / Due credit)
   status: 'Active' | 'Settled' | 'Overdue';
@@ -47,12 +47,56 @@ export interface Bill {
   customerId?: string;
   customerName: string;
   customerPhone?: string;
-  customerLocation?: string; // Customer's shop or residence location
+  customerLocation?: string; // Customer address or location
   items: BillItem[];
   subtotal: number;
   total: number;
+  costOfGoodsSold?: number;
+  costDataComplete?: boolean;
   paymentMode: 'Cash' | 'UPI / Online' | 'Pending Credit (Udhaar)';
   status: 'Paid' | 'Pending Credit';
+}
+
+export interface DashboardSummary {
+  period: 'today' | '7d' | 'month';
+  timeZone: string;
+  range: { startDate: string; endDate: string };
+  totals: {
+    salesRevenue: number;
+    expenses: number;
+    costOfGoodsSold: number | null;
+    netProfit: number | null;
+    profitDataComplete: boolean;
+    recognizedSalesCount: number;
+    customerCount: number;
+    inventory: {
+      productCount: number;
+      stockUnits: number;
+      stockValue: number | null;
+      valuationComplete: boolean;
+      lowStockCount: number;
+    };
+    dues: { customerOutstanding: number; supplierOutstanding: number };
+    employees: { total: number; active: number; payrollPaid: number; payrollPaymentCount: number } | null;
+  };
+  today: {
+    salesRevenue: number;
+    costOfGoodsSold: number | null;
+    operatingExpenses: number;
+    netProfit: number | null;
+    profitDataComplete: boolean;
+    salesCount: number;
+  };
+  trend: Array<{
+    date: string;
+    salesRevenue: number;
+    costOfGoodsSold: number | null;
+    operatingExpenses: number;
+    netProfit: number | null;
+    profitDataComplete: boolean;
+    salesCount: number;
+  }>;
+  topSellingProducts: Array<{ productId: string; name: string; quantity: number; category: string }>;
 }
 
 export interface SupplierReceipt {
@@ -61,8 +105,11 @@ export interface SupplierReceipt {
   date: string;
   receiptNumber?: string;
   category: string;
-  items: Array<{ name: string; qty: number; unitPrice: number; total: number; productId?: string; confidence?: number }>;
+  items: Array<{ name: string; qty: number; quantityText?: string; unitPrice: number; total: number; confidence?: number }>;
   total: number;
+  subtotal?: number;
+  taxes?: number;
+  discounts?: number;
   type: 'computer' | 'handwritten'; // Supports computer & handwritten receipts
   paymentStatus: 'Paid' | 'Unpaid' | 'Partially Paid';
   source: 'photo' | 'pdf' | 'manual';

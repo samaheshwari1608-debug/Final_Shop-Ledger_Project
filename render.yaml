@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: vyapaar-iq-shopledger
+    runtime: node
+    region: singapore
+    plan: 0.5c-512mb
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    disk:
+      name: shopledger-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SHOPLEDGER_DATA_DIR
+        value: /var/data

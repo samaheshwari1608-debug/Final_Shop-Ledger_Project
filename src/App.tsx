@@ -6,15 +6,9 @@ import {
   Bill, 
   BillItem, 
   SupplierReceipt, 
-  ShopkeeperProfile 
+  ShopkeeperProfile,
+  DashboardSummary,
 } from './types';
-import { 
-  INITIAL_SHOPKEEPER, 
-  INITIAL_PRODUCTS, 
-  INITIAL_CUSTOMERS, 
-  INITIAL_BILLS, 
-  INITIAL_SUPPLIER_RECEIPTS 
-} from './data/mockData';
 import { Sidebar, ActiveTab } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
 import { BillingView } from './components/BillingView';
@@ -56,6 +50,10 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function authHeaders(token: string, additional: Record<string, string> = {}) {
+  return { Authorization: ['Bearer', token].join(' '), ...additional };
+}
+
 export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'signup'>(() => {
     if (typeof window === 'undefined') return 'login';
@@ -65,29 +63,46 @@ export default function App() {
     if (typeof window === 'undefined') return false;
     return Boolean(localStorage.getItem('shopledger-token') && localStorage.getItem('shopledger-shop-id'));
   });
-  const [shopkeeper, setShopkeeper] = useState<ShopkeeperProfile>(INITIAL_SHOPKEEPER);
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
-  const [bills, setBills] = useState<Bill[]>(INITIAL_BILLS);
-  const [supplierReceipts, setSupplierReceipts] = useState<SupplierReceipt[]>(INITIAL_SUPPLIER_RECEIPTS);
+  const [shopkeeper, setShopkeeper] = useState<ShopkeeperProfile>({ name: '', shopName: '', phone: '', location: '' });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [supplierReceipts, setSupplierReceipts] = useState<SupplierReceipt[]>([]);
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
+  const [dashboardPeriod, setDashboardPeriod] = useState<DashboardSummary['period']>('7d');
+  const [dashboardError, setDashboardError] = useState('');
+  const [mutationError, setMutationError] = useState('');
 
   const loadDashboardFromServer = async (token: string, shopId: string) => {
-    const payload = await apiRequest<{ success: boolean; error?: string; products?: Product[]; customers?: Customer[]; bills?: Bill[]; shop?: { name?: string } }>(`/api/shops/${shopId}/dashboard`, {
+    const payload = await apiRequest<{ success: boolean; error?: string; products?: Product[]; customers?: Customer[]; bills?: Bill[]; shop?: { name?: string }; user?: { name?: string }; summary?: DashboardSummary }>(`/api/shops/${shopId}/dashboard?period=${dashboardPeriod}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!payload?.success) {
+    if (!payload?.success || !payload.summary) {
       throw new Error(payload?.error || 'Unable to load the shop dashboard.');
     }
 
-    if (Array.isArray(payload.products)) setProducts(payload.products);
-    if (Array.isArray(payload.customers)) setCustomers(payload.customers);
-    if (Array.isArray(payload.bills)) setBills(payload.bills);
+    setProducts(Array.isArray(payload.products) ? payload.products : []);
+    setCustomers(Array.isArray(payload.customers) ? payload.customers : []);
+    setBills(Array.isArray(payload.bills) ? payload.bills : []);
+    setDashboardSummary(payload.summary);
     const receipts = await apiRequest<{ success: boolean; items?: SupplierReceipt[] }>(`/api/shops/${shopId}/receipts`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (Array.isArray(receipts.items)) setSupplierReceipts(receipts.items);
+    setSupplierReceipts(Array.isArray(receipts.items) ? receipts.items : []);
     const shopName = payload.shop?.name ?? 'My Shop';
-    setShopkeeper((prev) => ({ ...prev, shopName }));
+    setShopkeeper((prev) => ({ ...prev, name: payload.user?.name || prev.name, shopName }));
+  };
+
+  const fetchDashboardSummary = async (period: DashboardSummary['period']) => {
+    const token = localStorage.getItem('shopledger-token');
+    const shopId = localStorage.getItem('shopledger-shop-id');
+    if (!token || !shopId) throw new Error('Your session expired. Please sign in again.');
+    const payload = await apiRequest<{ success: boolean; error?: string; summary?: DashboardSummary }>(
+      `/api/shops/${shopId}/dashboard?period=${period}`,
+      { headers: { Authorization: ['Bearer', token].join(' ') } },
+    );
+    if (!payload.success || !payload.summary) throw new Error(payload.error || 'Unable to refresh dashboard totals.');
+    return payload.summary;
   };
   useEffect(() => {
     const syncRouteFromLocation = () => {
@@ -124,11 +139,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  useEffect(() => {
+    if (!isLoggedIn || activeTab !== 'dashboard') return;
+    let active = true;
+    void fetchDashboardSummary(dashboardPeriod).then((summary) => {
+      if (!active) return;
+      setDashboardSummary(summary);
+      setDashboardError('');
+    }).catch((error) => {
+      if (active) setDashboardError(error instanceof Error ? error.message : 'Could not refresh dashboard totals.');
+    });
+    return () => { active = false; };
+  }, [activeTab, dashboardPeriod, isLoggedIn]);
+
   // Billing Cart state
-  const [cart, setCart] = useState<BillItem[]>([
-    { id: 'bi-demo-1', productId: 'p2', name: 'Maggi (70g)', price: 14, qty: 2, total: 28 },
-    { id: 'bi-demo-2', productId: 'p4', name: 'Coca Cola (500ml)', price: 40, qty: 1, total: 40 },
-  ]);
+  const [cart, setCart] = useState<BillItem[]>([]);
 
   // Modals state
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -145,49 +170,103 @@ export default function App() {
   const pendingCreditTotal = customers.reduce((acc, c) => acc + (c.pendingAmount || 0), 0);
 
   // Handlers for products
-  const handleAddProduct = (newProduct: Product) => {
-    setProducts((prev) => {
-      const exists = prev.some((p) => p.id === newProduct.id);
-      if (exists) {
-        return prev.map((p) => (p.id === newProduct.id ? newProduct : p));
-      }
-      return [newProduct, ...prev];
-    });
+  const handleAddProduct = async (newProduct: Product) => {
+    const token = localStorage.getItem('shopledger-token');
+    const shopId = localStorage.getItem('shopledger-shop-id');
+    if (!token || !shopId) throw new Error('Your session expired. Please sign in again.');
+    const existingProduct = products.some((product) => product.id === newProduct.id);
+    const result = await apiRequest<{ success: boolean; error?: string; product: Product }>(
+      `/api/shops/${shopId}/products${existingProduct ? `/${newProduct.id}` : ''}`,
+      {
+        method: existingProduct ? 'PUT' : 'POST',
+        headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify(newProduct),
+      },
+    );
+    if (!result.success || !result.product) throw new Error(result.error || 'Product could not be saved.');
+    setProducts((previous) => [result.product, ...previous.filter((product) => product.id !== result.product.id)]);
     setEditingProduct(null);
+    setMutationError('');
   };
 
-  const handleDeleteProduct = (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+  const handleDeleteProduct = async (productId: string) => {
+    const token = localStorage.getItem('shopledger-token');
+    const shopId = localStorage.getItem('shopledger-shop-id');
+    if (!token || !shopId) return setMutationError('Your session expired. Please sign in again.');
+    try {
+      const result = await apiRequest<{ success: boolean; error?: string }>(`/api/shops/${shopId}/products/${productId}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      });
+      if (!result.success) throw new Error(result.error || 'Product could not be deleted.');
+      setProducts((previous) => previous.filter((product) => product.id !== productId));
+      setMutationError('');
+    } catch (error) {
+      setMutationError(error instanceof Error ? error.message : 'Product could not be deleted.');
+    }
   };
 
   // Handlers for customers
-  const handleAddCustomer = (newCustomer: Customer) => {
-    setCustomers((prev) => {
-      const exists = prev.some((c) => c.id === newCustomer.id);
-      if (exists) {
-        return prev.map((c) => (c.id === newCustomer.id ? newCustomer : c));
-      }
-      return [newCustomer, ...prev];
-    });
-    setEditingCustomer(null);
-  };
-
-  const handleDeleteCustomer = (customerId: string) => {
-    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
-  };
-
-  const handleSettleCustomerPayment = (customerId: string, amount: number) => {
-    setCustomers((prev) =>
-      prev.map((c) =>
-        c.id === customerId
-          ? {
-              ...c,
-              pendingAmount: Math.max(0, c.pendingAmount - amount),
-              status: c.pendingAmount - amount <= 0 ? 'Settled' : 'Active',
-            }
-          : c
-      )
+  const handleAddCustomer = async (newCustomer: Customer) => {
+    const token = localStorage.getItem('shopledger-token');
+    const shopId = localStorage.getItem('shopledger-shop-id');
+    if (!token || !shopId) throw new Error('Your session expired. Please sign in again.');
+    const existingCustomer = customers.some((customer) => customer.id === newCustomer.id);
+    const result = await apiRequest<{ success: boolean; error?: string; customer: Customer }>(
+      `/api/shops/${shopId}/customers${existingCustomer ? `/${newCustomer.id}` : ''}`,
+      {
+        method: existingCustomer ? 'PUT' : 'POST',
+        headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify(newCustomer),
+      },
     );
+    if (!result.success || !result.customer) throw new Error(result.error || 'Customer could not be saved.');
+    setCustomers((previous) => [result.customer, ...previous.filter((customer) => customer.id !== result.customer.id)]);
+    setEditingCustomer(null);
+    setMutationError('');
+  };
+
+  const handleDeleteCustomer = async (customerId: string) => {
+    const token = localStorage.getItem('shopledger-token');
+    const shopId = localStorage.getItem('shopledger-shop-id');
+    if (!token || !shopId) return setMutationError('Your session expired. Please sign in again.');
+    try {
+      const result = await apiRequest<{ success: boolean; error?: string }>(`/api/shops/${shopId}/customers/${customerId}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      });
+      if (!result.success) throw new Error(result.error || 'Customer could not be deleted.');
+      setCustomers((previous) => previous.filter((customer) => customer.id !== customerId));
+      setMutationError('');
+    } catch (error) {
+      setMutationError(error instanceof Error ? error.message : 'Customer could not be deleted.');
+    }
+  };
+
+  const handleSettleCustomerPayment = async (
+    customerId: string,
+    amount: number,
+    paymentMethod: string,
+    referenceNumber: string,
+    idempotencyKey: string,
+  ) => {
+    const token = localStorage.getItem('shopledger-token');
+    const shopId = localStorage.getItem('shopledger-shop-id');
+    if (!token || !shopId) throw new Error('Your session expired. Please sign in again.');
+    const result = await apiRequest<{ success: boolean; error?: string; customer: Customer }>(
+      `/api/shops/${shopId}/customers/${customerId}/payments`,
+      {
+        method: 'POST',
+        headers: {
+          ...authHeaders(token),
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify({ amount, paymentMethod, referenceNumber }),
+      },
+    );
+    if (!result.success || !result.customer) throw new Error(result.error || 'Customer payment could not be saved.');
+    setCustomers((previous) => previous.map((customer) => customer.id === customerId ? result.customer : customer));
   };
 
   // Generate Bill handler: deducts stock & updates customer
@@ -195,7 +274,7 @@ export default function App() {
     const token = localStorage.getItem('shopledger-token');
     const shopId = localStorage.getItem('shopledger-shop-id');
     if (!token || !shopId) throw new Error('Your session expired. Please sign in again.');
-    const result = await apiRequest<{ success: boolean; error?: string; bill: Bill }>(`/api/shops/${shopId}/bills`, {
+    const result = await apiRequest<{ success: boolean; error?: string; bill: Bill; products: Product[]; customers: Customer[] }>(`/api/shops/${shopId}/bills`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -211,21 +290,13 @@ export default function App() {
         paymentMode: draftBill.paymentMode,
       }),
     });
-    if (!result.success || !result.bill) throw new Error(result.error || 'Bill could not be saved.');
+    if (!result.success || !result.bill || !Array.isArray(result.products) || !Array.isArray(result.customers)) {
+      throw new Error(result.error || 'Bill could not be saved or reconciled with current shop data.');
+    }
     const savedBill = result.bill;
     setBills((previous) => [savedBill, ...previous.filter((bill) => bill.id !== savedBill.id)]);
-    setProducts((previous) => previous.map((product) => {
-      const sold = savedBill.items.find((item) => item.productId === product.id);
-      return sold ? { ...product, stock: Math.max(0, product.stock - sold.qty) } : product;
-    }));
-    if (savedBill.customerId) {
-      setCustomers((previous) => previous.map((customer) => customer.id === savedBill.customerId ? {
-        ...customer,
-        totalPurchases: customer.totalPurchases + savedBill.total,
-        pendingAmount: customer.pendingAmount + (savedBill.status === 'Pending Credit' ? savedBill.total : 0),
-        lastVisit: savedBill.date,
-      } : customer));
-    }
+    setProducts(result.products);
+    setCustomers(result.customers);
     setGeneratedBillPreview(savedBill);
     return savedBill;
   };
@@ -233,14 +304,6 @@ export default function App() {
   // Supplier receipt handler
   const handleAddSupplierReceipt = (newReceipt: SupplierReceipt) => {
     setSupplierReceipts((prev) => [newReceipt, ...prev]);
-    if (newReceipt.transactionType === 'purchase') {
-      setProducts((previous) => previous.map((product) => {
-        const purchasedItem = newReceipt.items.find((item) => item.productId === product.id);
-        return purchasedItem
-          ? { ...product, stock: product.stock + purchasedItem.qty, purchasePrice: purchasedItem.unitPrice }
-          : product;
-      }));
-    }
   };
 
   // Voice Assistant Action Execution
@@ -329,6 +392,14 @@ export default function App() {
         pendingCreditTotal={pendingCreditTotal}
         onLogout={() => {
           setIsLoggedIn(false);
+          setProducts([]);
+          setCustomers([]);
+          setBills([]);
+          setSupplierReceipts([]);
+          setDashboardSummary(null);
+          setCart([]);
+          setMutationError('');
+          setDashboardError('');
           localStorage.removeItem('shopledger-token');
           localStorage.removeItem('shopledger-shop-id');
           window.history.pushState({}, '', '/login');
@@ -349,24 +420,17 @@ export default function App() {
             <span className="font-semibold text-[#0F172A]">{shopkeeper.shopName}</span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsVoiceOpen(true)}
-              className="flex items-center gap-1.5 text-[#059669] font-bold hover:text-[#047857] transition-colors"
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span>Voice Mic</span>
-            </button>
-          </div>
         </div>
+        {mutationError && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{mutationError}</p>}
 
         {/* Section 1: Dashboard */}
         {activeTab === 'dashboard' && (
           <DashboardView
-            products={products}
-            customers={customers}
-            bills={bills}
+            summary={dashboardSummary}
+            period={dashboardPeriod}
+            error={dashboardError}
             shopkeeper={shopkeeper}
+            onPeriodChange={setDashboardPeriod}
             onNavigateTab={setActiveTab}
             onOpenNewBill={() => setActiveTab('billing')}
             onOpenAddProduct={() => {
@@ -451,9 +515,10 @@ export default function App() {
           />
         )}
 
-        {/* Section 7: AI Insights & Shop Settings */}
-        {activeTab === 'ai_insights' && (
+        {(activeTab === 'ai_insights' || activeTab === 'settings') && (
           <AIInsightsView
+            key={activeTab}
+            view={activeTab === 'settings' ? 'profile' : 'advisor'}
             shopId={localStorage.getItem('shopledger-shop-id') || ''}
             token={localStorage.getItem('shopledger-token') || ''}
             shopkeeper={shopkeeper}

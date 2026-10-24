@@ -12,7 +12,6 @@ import {
   ShoppingBag,
   Mic,
   Wallet,
-  BriefcaseBusiness
 } from 'lucide-react';
 
 export type ActiveTab = 
@@ -25,7 +24,8 @@ export type ActiveTab =
   | 'expenses'
   | 'dues'
   | 'payroll'
-  | 'ai_insights';
+  | 'ai_insights'
+  | 'settings';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -67,9 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     { id: 'reports' as ActiveTab, label: 'Reports', icon: BarChart3 },
     { id: 'suppliers' as ActiveTab, label: 'Scan Receipts', icon: Truck },
-    { id: 'expenses' as ActiveTab, label: 'Expenses', icon: Wallet },
-    { id: 'dues' as ActiveTab, label: 'Dues', icon: Wallet },
-    { id: 'payroll' as ActiveTab, label: 'Employees & Payroll', icon: BriefcaseBusiness },
+    { id: 'expenses' as ActiveTab, label: 'Finance', icon: Wallet },
     { id: 'ai_insights' as ActiveTab, label: 'AI Insights', icon: Sparkles },
   ];
 
@@ -97,7 +95,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <nav className="px-3 py-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = item.id === 'expenses'
+              ? activeTab === 'expenses' || activeTab === 'dues' || activeTab === 'payroll'
+              : activeTab === item.id;
 
             return (
               <button
@@ -137,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div>
               <p className="text-xs font-bold leading-none text-white">AI Voice Assistant</p>
-              <p className="text-[10px] text-violet-100 mt-0.5">Bol kar bill ya hisaab karein</p>
+              <p className="text-[10px] text-violet-100 mt-0.5">Ask or speak in English</p>
             </div>
           </div>
           <span className="text-[10px] font-bold bg-white/20 px-1.5 py-0.5 rounded">Mic</span>
@@ -145,8 +145,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="pt-1 space-y-0.5">
           <button
-            onClick={() => setActiveTab('ai_insights')}
-            className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/70 transition-colors"
+            onClick={() => { setActiveTab('settings'); onCloseMobile(); }}
+            className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-medium transition-colors ${
+              activeTab === 'settings' ? 'bg-slate-800/70 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
+            }`}
           >
             <Settings className="w-4 h-4 text-slate-400" />
             <span>Settings</span>

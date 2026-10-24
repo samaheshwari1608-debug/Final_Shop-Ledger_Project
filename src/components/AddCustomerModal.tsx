@@ -5,7 +5,7 @@ import { Customer } from '../types';
 interface AddCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddCustomer: (customer: Customer) => void;
+  onAddCustomer: (customer: Customer) => Promise<void>;
   editingCustomer?: Customer | null;
 }
 
@@ -19,6 +19,8 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
   const [pendingAmount, setPendingAmount] = useState('0');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -26,13 +28,19 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
     setPhone(editingCustomer?.phone || '');
     setLocation(editingCustomer?.location || '');
     setPendingAmount(String(editingCustomer?.pendingAmount || 0));
+    setError('');
   }, [editingCustomer, isOpen]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !phone.trim()) return;
+    if (!name.trim() || !phone.trim() || isSaving) return;
+    const initialDue = Number(pendingAmount);
+    if (!Number.isFinite(initialDue) || initialDue < 0) {
+      setError('Enter a valid non-negative opening balance.');
+      return;
+    }
 
     const newCustomer: Customer = {
       id: editingCustomer ? editingCustomer.id : `c-${Date.now().toString().slice(-4)}`,
@@ -40,13 +48,21 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
       phone: phone.trim(),
       location: location.trim(),
       totalPurchases: editingCustomer ? editingCustomer.totalPurchases : 0,
-      pendingAmount: parseFloat(pendingAmount) || 0,
+      pendingAmount: editingCustomer ? editingCustomer.pendingAmount : initialDue,
       status: 'Active',
       lastVisit: new Date().toISOString().split('T')[0],
     };
 
-    onAddCustomer(newCustomer);
-    onClose();
+    setIsSaving(true);
+    setError('');
+    try {
+      await onAddCustomer(newCustomer);
+      onClose();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Customer could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -140,6 +156,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
             </div>
           </div>
 
+          {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
           <div className="pt-2 flex items-center justify-end gap-2.5">
             <button
               type="button"
@@ -150,10 +167,11 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5"
+              disabled={isSaving}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 disabled:opacity-60"
             >
               <Check className="w-4 h-4" />
-              <span>{editingCustomer ? 'Update Customer' : 'Save Customer'}</span>
+              <span>{isSaving ? 'Saving…' : editingCustomer ? 'Update Customer' : 'Save Customer'}</span>
             </button>
           </div>
         </form>

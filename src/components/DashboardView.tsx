@@ -1,133 +1,62 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  FileText, 
-  Wallet, 
-  Package, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  TrendingUp,
-  Receipt,
-  Plus,
-  Truck,
-  Sparkles,
-  ChevronDown
-} from 'lucide-react';
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  CartesianGrid 
+import React from 'react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
-import { Product, Customer, Bill, ShopkeeperProfile } from '../types';
+import {
+  BriefcaseBusiness,
+  FileText,
+  Package,
+  Receipt,
+  Sparkles,
+  Truck,
+  Wallet,
+} from 'lucide-react';
+import { DashboardSummary, ShopkeeperProfile } from '../types';
+import { ActiveTab } from './Sidebar';
 
 interface DashboardViewProps {
-  products: Product[];
-  customers: Customer[];
-  bills: Bill[];
+  summary: DashboardSummary | null;
+  period: DashboardSummary['period'];
+  error: string;
   shopkeeper: ShopkeeperProfile;
-  onNavigateTab: (tab: any) => void;
+  onPeriodChange: (period: DashboardSummary['period']) => void;
+  onNavigateTab: (tab: ActiveTab) => void;
   onOpenNewBill: () => void;
   onOpenAddProduct: () => void;
 }
 
+const money = (amount: number | null) => amount === null
+  ? '—'
+  : `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const dateLabel = (date: string) => new Date(`${date}T00:00:00.000Z`).toLocaleDateString('en-IN', {
+  timeZone: 'UTC',
+  day: 'numeric',
+  month: 'short',
+});
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
-  products,
-  customers,
-  bills,
+  summary,
+  period,
+  error,
   shopkeeper,
+  onPeriodChange,
   onNavigateTab,
   onOpenNewBill,
   onOpenAddProduct,
 }) => {
-  const [timeFilter, setTimeFilter] = useState<'This Week' | 'Today' | 'This Month'>('This Week');
-
-  // Compute daily revenue trends for the last 7 days directly from the 'bills' dataset
-  const last7DaysTrend = useMemo(() => {
-    const daysArr: { date: string; day: string; fullDate: string; revenue: number; billsCount: number }[] = [];
-    const today = new Date();
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const dateKey = d.toISOString().split('T')[0];
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const fullDateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-
-      // Sum all customer bills recorded on this date
-      const matchingBills = bills.filter((b) => b.date === dateKey);
-      const dayBillTotal = matchingBills.reduce((acc, b) => acc + (Number(b.total) || 0), 0);
-
-      // Baseline volume simulation calibrated to match the store profile (~8k to 17k per day)
-      const baseDailyWeights = [8500, 11400, 9800, 13200, 14500, 17200, 12450];
-      const baseWeight = baseDailyWeights[6 - i] ?? 10000;
-      const combinedRevenue = dayBillTotal > 0 ? baseWeight + dayBillTotal : baseWeight;
-      const baseBillsCount = [21, 26, 23, 29, 32, 36, 28][6 - i] ?? 25;
-
-      daysArr.push({
-        date: dateKey,
-        day: dayName,
-        fullDate: fullDateStr,
-        revenue: combinedRevenue,
-        billsCount: matchingBills.length + baseBillsCount,
-      });
-    }
-
-    return daysArr;
-  }, [bills]);
-
-  const sevenDayTotalRevenue = useMemo(
-    () => last7DaysTrend.reduce((acc, d) => acc + d.revenue, 0),
-    [last7DaysTrend]
-  );
-  const avgDailyRevenue = Math.round(sevenDayTotalRevenue / 7);
-  const peakDay = useMemo(
-    () => [...last7DaysTrend].sort((a, b) => b.revenue - a.revenue)[0],
-    [last7DaysTrend]
-  );
-
-  // Code-calculated totals
-  const todaySales = bills.filter(b => b.date === new Date().toISOString().split('T')[0]).reduce((acc, b) => acc + (b.total || 0), 0) + 12450;
-  const billsGeneratedCount = bills.length + 25;
-  const pendingCreditTotal = customers.reduce((acc, c) => acc + (c.pendingAmount || 0), 0);
-  const lowStockProducts = products.filter((p) => p.stock <= p.lowStockThreshold);
-
-  const topSellingProducts = [
-    { rank: 1, name: 'Amul Milk', count: '120 pcs', category: 'Dairy' },
-    { rank: 2, name: 'Maggi', count: '98 pcs', category: 'Snacks' },
-    { rank: 3, name: 'Parle-G', count: '85 pcs', category: 'Snacks' },
-    { rank: 4, name: 'Coca Cola', count: '60 pcs', category: 'Beverages' },
-    { rank: 5, name: "Lay's Chips", count: '52 pcs', category: 'Snacks' },
-  ];
-
-  // Custom Recharts Tooltip formatted in Indian Rupees (₹)
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xl text-xs space-y-1">
-          <div className="flex items-center justify-between gap-4 font-bold text-slate-800">
-            <span>{data.day}, {data.fullDate}</span>
-            <span className="text-[10px] text-slate-400 font-mono">{data.date}</span>
-          </div>
-          <div className="flex items-center gap-2 text-emerald-600 font-bold font-mono text-sm pt-0.5">
-            <span>₹ {data.revenue.toLocaleString('en-IN')}</span>
-            <span className="text-[10px] font-normal text-slate-400 font-sans">revenue</span>
-          </div>
-          <div className="text-[11px] text-slate-500">
-            Customer Bills: <span className="font-semibold text-slate-700">{data.billsCount} bills</span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
+  const selectedPeriod = period;
+  const trend = summary?.trend || [];
+  const topProducts = summary?.topSellingProducts || [];
 
   return (
     <div className="space-y-6">
-      {/* Page Title & Profile Bar (Own location removed as requested) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">
@@ -135,237 +64,146 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             VyapaarIQ Overview
           </div>
           <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Here’s what’s moving in your shop today.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Business figures calculated from your saved records.</p>
         </div>
-
-        {/* Profile Pill */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2.5 bg-white border border-slate-200/80 px-3.5 py-1.5 rounded-xl shadow-xs">
-            <div className="w-7 h-7 rounded-full bg-slate-700 text-white font-bold text-xs flex items-center justify-center">
-              {shopkeeper.name.charAt(0)}
-            </div>
-            <span className="text-xs font-semibold text-slate-800">{shopkeeper.name}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+        <div className="flex items-center gap-2.5 bg-white border border-slate-200/80 px-3.5 py-1.5 rounded-xl shadow-xs">
+          <div className="w-7 h-7 rounded-full bg-slate-700 text-white font-bold text-xs flex items-center justify-center">
+            {shopkeeper.name.charAt(0) || '?'}
           </div>
+          <span className="text-xs font-semibold text-slate-800">{shopkeeper.name || shopkeeper.shopName}</span>
         </div>
       </div>
 
-      {/* 4 Stat Cards Row (Exact as screenshot) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Today's Sales */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center gap-4 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-emerald-600/20 font-bold text-xl">
-            ₹
-          </div>
-          <div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              ₹ {todaySales.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-0.5">Today's Sales</div>
-            <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 mt-1">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>12%</span>
-            </div>
-          </div>
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Dashboard data could not be refreshed: {error}
         </div>
+      )}
 
-        {/* Card 2: Bills Generated */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center gap-4 hover:shadow-md transition-shadow">
-          <div className="w-12 h-12 rounded-xl bg-sky-500 flex items-center justify-center text-white shrink-0 shadow-sm shadow-sky-500/20">
-            <FileText className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              {billsGeneratedCount}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-0.5">Bills Generated</div>
-            <div className="flex items-center gap-1 text-[11px] font-bold text-sky-600 mt-1">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>8%</span>
-            </div>
-          </div>
+      {!summary ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          {error ? 'Dashboard data is unavailable. Retry by switching tabs or refreshing the page.' : 'Loading business totals…'}
         </div>
-
-        {/* Card 3: Pending Credit (Udhaar) */}
-        <div 
-          onClick={() => onNavigateTab('customers')}
-          className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center text-white shrink-0 shadow-sm shadow-amber-500/20">
-            <Wallet className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              ₹ {pendingCreditTotal.toLocaleString('en-IN')}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-0.5">Pending Credit (उधार)</div>
-            <div className="flex items-center gap-1 text-[11px] font-bold text-amber-600 mt-1">
-              <ArrowDownRight className="w-3.5 h-3.5" />
-              <span>5%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Low Stock Items */}
-        <div 
-          onClick={() => onNavigateTab('inventory')}
-          className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-purple-600/20">
-            <Package className="w-6 h-6" />
-          </div>
-          <div className="flex-1">
-            <div className="text-2xl font-black text-slate-900 tracking-tight font-mono tabular-nums">
-              {lowStockProducts.length}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-0.5">Low Stock Items</div>
-            <button className="text-[11px] font-bold text-purple-600 hover:text-purple-700 mt-1 underline block">
-              View
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Grid: Recharts Daily Revenue Trends + Top Selling Products */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Sales Overview Area Chart with Recharts (7 cols) */}
-        <div className="lg:col-span-7 bg-white rounded-2xl p-6 border border-slate-100 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">Sales Overview · Last 7 Days</h3>
-              <p className="text-[11px] text-slate-400">Daily revenue trend calculated directly from customer bills</p>
-            </div>
-            <select
-              value={timeFilter}
-              onChange={(e) => setTimeFilter(e.target.value as any)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 font-medium focus:outline-none"
-            >
-              <option value="This Week">Last 7 Days</option>
-              <option value="Today">Today</option>
-              <option value="This Month">This Month</option>
-            </select>
-          </div>
-
-          {/* Recharts Area Chart */}
-          <div className="w-full h-64 pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={last7DaysTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="rechartsGreenGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#059669" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#059669" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis 
-                  dataKey="day" 
-                  tickLine={false} 
-                  axisLine={{ stroke: '#E2E8F0' }} 
-                  tick={{ fontSize: 12, fill: '#64748B', fontWeight: 500 }} 
-                />
-                <YAxis 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tick={{ fontSize: 11, fill: '#94A3B8', fontFamily: 'JetBrains Mono' }} 
-                  tickFormatter={(val) => `${Math.round(val / 1000)}K`} 
-                  domain={[0, 'auto']}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Area 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  stroke="#059669" 
-                  strokeWidth={3} 
-                  fillOpacity={1} 
-                  fill="url(#rechartsGreenGrad)" 
-                  activeDot={{ r: 6, fill: '#059669', stroke: '#FFFFFF', strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Quick Financial Visibility Strip */}
-          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-600" />
-              <span>7-Day Revenue: <strong className="font-mono text-slate-900 font-bold">₹ {sevenDayTotalRevenue.toLocaleString('en-IN')}</strong></span>
-            </div>
-            <div className="text-slate-400 hidden sm:inline">·</div>
-            <div>
-              <span>Avg Daily: <strong className="font-mono text-slate-900 font-bold">₹ {avgDailyRevenue.toLocaleString('en-IN')}</strong></span>
-            </div>
-            <div className="text-slate-400 hidden sm:inline">·</div>
-            <div>
-              <span>Peak Day: <strong className="text-emerald-700 font-bold">{peakDay?.day} (₹ {peakDay?.revenue.toLocaleString('en-IN')})</strong></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Top Selling Products (5 cols) (Exact as screenshot) */}
-        <div className="lg:col-span-5 bg-white rounded-2xl p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 mb-4">Top Selling Products</h3>
-
-            <div className="space-y-3.5">
-              {topSellingProducts.map((p) => (
-                <div key={p.rank} className="flex items-center justify-between text-xs py-1">
-                  <div className="flex items-center gap-3">
-                    <span className="w-5 font-bold text-slate-500 font-mono text-xs">
-                      {p.rank}
-                    </span>
-                    <span className="font-semibold text-slate-800">{p.name}</span>
-                  </div>
-
-                  <span className="font-mono text-slate-600 font-semibold tabular-nums">
-                    {p.count}
-                  </span>
+      ) : (
+        <>
+          <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-xs">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <Wallet className="h-4 w-4 text-emerald-600" />
+                  Sales · Today
                 </div>
-              ))}
+                <p className="mt-1 text-xs text-slate-500">
+                  Confirmed sales for today · {summary.timeZone}
+                </p>
+              </div>
+              <div className="text-2xl font-black tabular-nums text-emerald-700">
+                {money(summary.today.salesRevenue)}
+              </div>
             </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+              <div><p className="text-[11px] text-slate-500">Recorded expenses today</p><p className="mt-1 text-sm font-bold text-slate-900">{money(summary.today.operatingExpenses)}</p></div>
+              <div><p className="text-[11px] text-slate-500">Confirmed bills today</p><p className="mt-1 text-sm font-bold text-slate-900">{summary.today.salesCount}</p></div>
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-lg font-bold text-white">₹</span><div><p className="text-xs text-slate-500">Sales · selected period</p><p className="mt-1 text-xl font-black text-slate-900">{money(summary.totals.salesRevenue)}</p></div></div>
+              <p className="mt-3 text-[11px] text-slate-500">{summary.totals.recognizedSalesCount} confirmed bills</p>
+            </article>
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700"><FileText className="h-5 w-5" /></span><div><p className="text-xs text-slate-500">Expenses · selected period</p><p className="mt-1 text-xl font-black text-slate-900">{money(summary.totals.expenses)}</p></div></div>
+              <button onClick={() => onNavigateTab('expenses')} className="mt-3 text-[11px] font-bold text-emerald-700 hover:text-emerald-800">View expenses</button>
+            </article>
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700"><Wallet className="h-5 w-5" /></span><div><p className="text-xs text-slate-500">Net profit · selected period</p><p className="mt-1 text-xl font-black text-slate-900">{money(summary.totals.netProfit)}</p></div></div>
+              <p className="mt-3 text-[11px] text-slate-500">Recognized sales − COGS − recorded expenses</p>
+            </article>
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-700"><Receipt className="h-5 w-5" /></span><div><p className="text-xs text-slate-500">Unique customers</p><p className="mt-1 text-xl font-black text-slate-900">{summary.totals.customerCount.toLocaleString('en-IN')}</p></div></div>
+              <button onClick={() => onNavigateTab('customers')} className="mt-3 text-[11px] font-bold text-emerald-700 hover:text-emerald-800">View customers</button>
+            </article>
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Wallet className="h-5 w-5" /></span><div><p className="text-xs text-slate-500">Customer outstanding</p><p className="mt-1 text-xl font-black text-slate-900">{money(summary.totals.dues.customerOutstanding)}</p></div></div>
+              <button onClick={() => onNavigateTab('dues')} className="mt-3 text-[11px] font-bold text-emerald-700 hover:text-emerald-800">Review dues</button>
+            </article>
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-orange-700"><Truck className="h-5 w-5" /></span><div><p className="text-xs text-slate-500">Supplier outstanding</p><p className="mt-1 text-xl font-black text-slate-900">{money(summary.totals.dues.supplierOutstanding)}</p></div></div>
+              <button onClick={() => onNavigateTab('dues')} className="mt-3 text-[11px] font-bold text-emerald-700 hover:text-emerald-800">Review supplier dues</button>
+            </article>
+            <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700"><BriefcaseBusiness className="h-5 w-5" /></span><div><p className="text-xs text-slate-500">Employees & payroll</p><p className="mt-1 text-xl font-black text-slate-900">{summary.totals.employees ? `${summary.totals.employees.active} active / ${summary.totals.employees.total}` : 'Restricted'}</p></div></div>
+              {summary.totals.employees && <><p className="mt-2 text-[11px] text-slate-500">{summary.totals.employees.payrollPaymentCount} payments · {money(summary.totals.employees.payrollPaid)} in selected period</p><button onClick={() => onNavigateTab('payroll')} className="mt-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800">View payroll</button></>}
+            </article>
+          </section>
+
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+            <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-xs xl:col-span-8">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Daily sales trend</h2>
+                  <p className="mt-1 text-[11px] text-slate-500">{summary.range.startDate} – {summary.range.endDate}</p>
+                </div>
+                <select
+                  aria-label="Dashboard date range"
+                  value={selectedPeriod}
+                  onChange={(event) => onPeriodChange(event.target.value as DashboardSummary['period'])}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+                >
+                  <option value="today">Today</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="month">This month</option>
+                </select>
+              </div>
+              <div className="mt-4 h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trend} margin={{ top: 10, right: 10, left: -18, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#059669" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#059669" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="date" tickFormatter={dateLabel} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#64748B' }} tickFormatter={(value) => `₹${Number(value).toLocaleString('en-IN')}`} />
+                    <Tooltip formatter={(value) => [money(value === null || value === undefined ? null : Number(value)), 'Sales revenue']} labelFormatter={(label) => dateLabel(String(label))} />
+                    <Area type="monotone" dataKey="salesRevenue" name="Sales revenue" stroke="#059669" strokeWidth={2.5} fill="url(#salesGradient)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              {trend.length === 0 && <p className="text-center text-xs text-slate-400">No dates in this reporting period.</p>}
+            </div>
+            <div className="flex flex-col justify-between rounded-2xl border border-slate-100 bg-white p-6 shadow-xs xl:col-span-4">
+              <div>
+                <h2 className="mb-4 text-sm font-bold text-slate-900">Top selling products</h2>
+                {topProducts.length ? (
+                  <div className="space-y-3">
+                    {topProducts.map((product, index) => (
+                      <div key={product.productId} className="flex items-center justify-between gap-3 text-xs">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="w-5 shrink-0 font-mono font-bold text-slate-400">{index + 1}</span>
+                          <div className="min-w-0"><p className="truncate font-semibold text-slate-800">{product.name}</p><p className="text-[10px] text-slate-400">{product.category}</p></div>
+                        </div>
+                        <span className="shrink-0 font-mono font-semibold text-slate-600">{product.quantity.toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="py-6 text-center text-xs text-slate-400">No confirmed sales in this period.</p>}
+              </div>
+              <button onClick={() => onNavigateTab('inventory')} className="mt-5 border-t border-slate-100 pt-4 text-left text-xs font-bold text-emerald-700 hover:text-emerald-800">Manage stock →</button>
+            </div>
+          </section>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-xs">
+            <span className="mr-2 text-xs font-bold uppercase tracking-wide text-slate-500">Quick actions:</span>
+            <button onClick={onOpenNewBill} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700"><Receipt className="h-3.5 w-3.5" />Create bill</button>
+            <button onClick={onOpenAddProduct} className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800"><Package className="h-3.5 w-3.5" />Add product</button>
+            <button onClick={() => onNavigateTab('suppliers')} className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200"><Truck className="h-3.5 w-3.5" />Scan supplier receipt</button>
           </div>
-
-          <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between">
-            <span className="text-xs text-slate-400">Inventory Status: Healthy</span>
-            <button
-              onClick={() => onNavigateTab('inventory')}
-              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 underline"
-            >
-              Manage Stock &rarr;
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Action Shortcuts Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide mr-2">
-          VyapaarIQ Shortcuts:
-        </span>
-
-        <button
-          onClick={onOpenNewBill}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
-        >
-          <Receipt className="w-3.5 h-3.5" />
-          <span>+ Create New Bill</span>
-        </button>
-
-        <button
-          onClick={onOpenAddProduct}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-xs transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>+ Add New Product</span>
-        </button>
-
-        <button
-          onClick={() => onNavigateTab('suppliers')}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors"
-        >
-          <Truck className="w-3.5 h-3.5 text-slate-600" />
-          <span>Scan Supplier Receipt (Expenses)</span>
-        </button>
-      </div>
+        </>
+      )}
     </div>
   );
 };

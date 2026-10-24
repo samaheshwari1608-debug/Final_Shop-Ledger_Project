@@ -4,18 +4,13 @@ import {
   Send, 
   Bot, 
   User, 
-  TrendingUp, 
-  AlertTriangle, 
-  Package, 
-  Settings, 
   Save, 
-  MapPin, 
-  Phone, 
-  Store
+  MapPin,
 } from 'lucide-react';
 import { ShopkeeperProfile } from '../types';
 
 interface AIInsightsViewProps {
+  view: 'advisor' | 'profile';
   shopId: string;
   token: string;
   shopkeeper: ShopkeeperProfile;
@@ -30,13 +25,13 @@ interface QAMessage {
 }
 
 export const AIInsightsView: React.FC<AIInsightsViewProps> = ({
+  view,
   shopId,
   token,
   shopkeeper,
   onUpdateShopkeeper,
   onOpenVoice,
 }) => {
-  const [activeTab, setActiveTab] = useState<'insights' | 'settings'>('insights');
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -123,40 +118,16 @@ Try: "What were my sales today?", "Which products are running low?", or "How muc
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            AI Insights & Shop Settings
+            {view === 'advisor' ? 'AI Business Advisor' : 'Settings'}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Business intelligence queries, shop location configuration & voice logs
+            {view === 'advisor' ? 'Answers based on your saved business records' : 'Manage your shop profile and billing details'}
           </p>
-        </div>
-
-        {/* Tab switcher */}
-        <div className="flex items-center gap-1 bg-white border border-slate-200/80 p-1 rounded-xl shadow-xs self-start">
-          <button
-            onClick={() => setActiveTab('insights')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'insights'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            AI Business Advisor
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === 'settings'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Shop & Location Settings
-          </button>
         </div>
       </div>
 
       {/* Tab 1: AI Advisor */}
-      {activeTab === 'insights' && (
+      {view === 'advisor' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col h-[650px]">
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
@@ -165,7 +136,7 @@ Try: "What were my sales today?", "Which products are running low?", or "How muc
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
-                  ShopLedger Gemini Retail Intelligence
+                  ShopLedger Business Advisor
                 </h3>
                 <p className="text-xs text-slate-500">Answers calculated from this shop's saved business records</p>
               </div>
@@ -262,10 +233,10 @@ Try: "What were my sales today?", "Which products are running low?", or "How muc
       )}
 
       {/* Tab 2: Settings & Location */}
-      {activeTab === 'settings' && (
+      {view === 'profile' && (
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs max-w-3xl space-y-6">
           <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-base font-bold text-slate-900">Shop Profile & Location Details</h3>
+            <h3 className="text-base font-bold text-slate-900">Shop Profile</h3>
             <p className="text-xs text-slate-500 mt-0.5">
               These details appear on your printed customer bills and UPI QR codes
             </p>

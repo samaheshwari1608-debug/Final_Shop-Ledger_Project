@@ -16,6 +16,7 @@ interface ReceiptItemDraft {
   unitPrice: string;
   total: string;
   confidence?: number;
+  reviewed: boolean;
 }
 
 async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -78,6 +79,8 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [potentialDuplicate, setPotentialDuplicate] = useState<{ id: string; vendor: string; date: string; receiptNumber?: string; total: number } | null>(null);
   const [confirmedPotentialDuplicateId, setConfirmedPotentialDuplicateId] = useState('');
+  const [detailsReviewed, setDetailsReviewed] = useState(false);
+  const [duplicateReceiptId, setDuplicateReceiptId] = useState('');
 
   useEffect(() => {
     fetch('/api/health')
@@ -100,7 +103,16 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
     [items],
   );
   const enteredLinesTotal = items.reduce((sum, item) => sum + Math.round((Number(item.total) || 0) * 100), 0) / 100;
-  const totalsMismatch = items.length > 0 && total !== '' && Math.abs(calculatedTotal - Number(total)) > 0.01;
+  const itemLineMismatch = items.some((item) => Math.abs(
+    Math.round((Number.parseFloat(item.qty) || 0) * (Number(item.unitPrice) || 0) * 100) / 100 - (Number(item.total) || 0),
+  ) > 0.01);
+  const totalsMismatch = items.length > 0 && (itemLineMismatch || (total !== '' && (
+    subtotal !== ''
+      ? Math.abs(calculatedTotal - Number(subtotal)) > 0.01
+      : taxes !== '' || discounts !== ''
+        ? Math.abs(calculatedTotal + (Number(taxes) || 0) - (Number(discounts) || 0) - Number(total)) > 0.01
+        : Math.abs(calculatedTotal - Number(total)) > 0.01
+  )));
   const subtotalMismatch = items.length > 0 && subtotal !== '' && Math.abs(enteredLinesTotal - Number(subtotal)) > 0.01;
   const invoiceMathMismatch = subtotal !== '' && total !== ''
     && Math.abs(Number(subtotal) + (Number(taxes) || 0) - (Number(discounts) || 0) - Number(total)) > 0.01;
@@ -121,6 +133,8 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
     setOcrWarning('');
     setFileHash('');
     setReceiptType('');
+    setDetailsReviewed(false);
+    setDuplicateReceiptId('');
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
       setError('Choose a JPG, PNG, or PDF file.');
@@ -149,6 +163,7 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
         body: JSON.stringify({ data: dataUrl, mimeType: file.type }),
       });
       if (upload.duplicate) {
+        setDuplicateReceiptId(upload.existingReceiptId || '');
         setError(`Duplicate receipt detected. This receipt has already been recorded.${upload.existingReceiptId ? ` Existing receipt: ${upload.existingReceiptId}.` : ''}`);
         return;
       }
@@ -197,6 +212,7 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
             unitPrice: item.unitPrice === null || item.unitPrice === undefined ? '' : String(item.unitPrice),
             total: item.total === null || item.total === undefined ? '' : String(item.total),
             confidence: typeof item.confidence === 'number' ? item.confidence : undefined,
+            reviewed: false,
           };
         }));
       }
@@ -208,13 +224,14 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
     }
   };
 
-  const addItem = () => setItems((previous) => [...previous, { name: '', qty: '1', quantityText: '1', unitPrice: '', total: '' }]);
+  const addItem = () => setItems((previous) => [...previous, { name: '', qty: '1', quantityText: '1', unitPrice: '', total: '', reviewed: true }]);
 
   const saveReceipt = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
     setMessage('');
     setPotentialDuplicate(null);
+    setDuplicateReceiptId('');
     if (!vendor.trim() || !Number.isFinite(Number(total)) || Number(total) <= 0) {
       setError('Supplier name and a positive invoice total are required.');
       return;
@@ -223,7 +240,23 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
       setError('Select whether the uploaded receipt is printed or handwritten.');
       return;
     }
-    if (totalsMismatch && !window.confirm(`Line items add up to ${currency(calculatedTotal)}, but the printed total is ${currency(Number(total))}. Continue after verifying the receipt?`)) return;
+    if (fileData && !detailsReviewed) {
+      setError('Review the extracted or manually entered receipt details and confirm before approval.');
+      return;
+    }
+    if (items.some((item) => !Number.isFinite(Number.parseFloat(item.qty)) || Number.parseFloat(item.qty) <= 0
+      || !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0
+      || !Number.isFinite(Number(item.total)) || Number(item.total) < 0)) {
+      setError('Enter a valid quantity, unit price, and line total for every receipt item.');
+      return;
+    }
+    if (items.some((item) => item.confidence !== undefined && !item.reviewed)) {
+      setError('Mark each extracted line as reviewed before approval.');
+      return;
+    }
+    const confirmTotalsMismatch = totalsMismatch || subtotalMismatch || invoiceMathMismatch;
+    if (confirmTotalsMismatch
+      && !window.confirm('Receipt line items, subtotal, taxes, discounts, and grand total do not reconcile. Continue only if you have reviewed and corrected the receipt.')) return;
     setBusy(true);
     try {
       const result = await request<{ receipt: SupplierReceipt; purchase?: SupplierPurchase }>(`/api/shops/${shopId}/receipts`, token, {
@@ -251,6 +284,7 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
           source: fileMime === 'application/pdf' ? 'pdf' : fileData ? 'photo' : 'manual',
           type: receiptType || 'computer',
           transactionType,
+          confirmTotalsMismatch,
           documentHash: fileHash || undefined,
           documentExtension: fileExtension,
           confirmPotentialDuplicateId: confirmedPotentialDuplicateId || undefined,
@@ -272,8 +306,10 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
       setFileHash('');
       setFileName('');
       setReceiptType('');
+      setDetailsReviewed(false);
       setPotentialDuplicate(null);
       setConfirmedPotentialDuplicateId('');
+      setDuplicateReceiptId('');
       setMessage('Receipt approved and saved. Inventory stock was not changed.');
     } catch (saveError) {
       const candidateError = saveError as Error & {
@@ -285,6 +321,7 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
         setConfirmedPotentialDuplicateId('');
         setError(candidateError.message);
       } else {
+        setDuplicateReceiptId((saveError as Error & { existingReceiptId?: string }).existingReceiptId || '');
         setError(saveError instanceof Error ? saveError.message : 'Could not save this receipt.');
       }
     } finally {
@@ -326,6 +363,27 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
     }
   };
 
+  const downloadOriginalReceipt = async (receipt: SupplierReceipt) => {
+    if (!receipt.documentHash || !receipt.documentExtension) return;
+    setError('');
+    try {
+      const response = await fetch(`/api/shops/${shopId}/receipt-documents/${receipt.documentHash}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`Could not retrieve the original receipt (${response.status}).`);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `receipt-${receipt.id}.${receipt.documentExtension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Could not retrieve the original receipt.');
+    }
+  };
+
   return (
     <section className="space-y-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -339,7 +397,7 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
         </div>
       </header>
 
-      <form onSubmit={saveReceipt} className="space-y-5 rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
+      <form onSubmit={saveReceipt} onChangeCapture={() => { if (fileData) setDetailsReviewed(false); }} className="space-y-5 rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
         <div className="grid gap-3 sm:grid-cols-2">
           <button type="button" onClick={() => fileInput.current?.click()} disabled={busy} className="flex min-h-24 items-center justify-center gap-3 rounded-xl border border-dashed border-emerald-300 bg-emerald-50/60 p-4 text-left hover:bg-emerald-50 disabled:opacity-60">
             <Camera className="h-5 w-5 text-[#059669]" />
@@ -355,7 +413,7 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
         {fileName && (
           <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
             <span className="flex items-center gap-2 truncate"><FileText className="h-4 w-4 shrink-0 text-[#059669]" />{fileName}</span>
-            <button type="button" onClick={() => { setFileData(''); setFileName(''); setFileHash(''); setFileExtension(undefined); setReceiptType(''); }} aria-label="Remove uploaded file" className="rounded-lg p-1 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={() => { setFileData(''); setFileName(''); setFileHash(''); setFileExtension(undefined); setReceiptType(''); setDetailsReviewed(false); }} aria-label="Remove uploaded file" className="rounded-lg p-1 text-slate-500 hover:bg-white"><X className="h-4 w-4" /></button>
           </div>
         )}
         {fileData && fileMime.startsWith('image/') && <img src={fileData} alt="Uploaded receipt preview" className="max-h-72 rounded-xl border border-slate-200 object-contain" />}
@@ -374,13 +432,17 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
         {busy && <p className="flex items-center gap-2 text-sm text-[#047857]"><LoaderCircle className="h-4 w-4 animate-spin" />Processing…</p>}
         {aiConfigured === false && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"><AlertTriangle className="mr-2 inline h-4 w-4" />Receipt AI is not configured on this server. Add GEMINI_API_KEY to .env.local and restart; manual entry remains available.</p>}
         {ocrWarning && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800"><AlertTriangle className="mr-2 inline h-4 w-4" />{ocrWarning}</p>}
-        {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}{duplicateReceiptId && <a className="ml-2 font-semibold underline" href={`#receipt-${duplicateReceiptId}`}>View existing receipt</a>}</p>}
         {potentialDuplicate && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <p>Possible match: {potentialDuplicate.vendor} · {potentialDuplicate.date} · {potentialDuplicate.receiptNumber || potentialDuplicate.id} · {currency(potentialDuplicate.total)}. Existing record ID: {potentialDuplicate.id}.</p>
+          <p>Possible match: {potentialDuplicate.vendor} · {potentialDuplicate.date} · {potentialDuplicate.receiptNumber || potentialDuplicate.id} · {currency(potentialDuplicate.total)}. <a className="font-semibold underline" href={`#receipt-${potentialDuplicate.id}`}>Review existing receipt {potentialDuplicate.id}</a>.</p>
           <button type="button" onClick={() => setConfirmedPotentialDuplicateId(potentialDuplicate.id)} className="mt-2 rounded-lg border border-amber-500 px-3 py-1.5 font-semibold hover:bg-amber-100">
             {confirmedPotentialDuplicateId === potentialDuplicate.id ? 'Confirmed as a different receipt' : 'I reviewed this; this is a different receipt'}
           </button>
         </div>}
+        {fileData && <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+          <input type="checkbox" checked={detailsReviewed} onChange={(event) => setDetailsReviewed(event.target.checked)} className="mt-0.5 accent-emerald-600" />
+          <span>I reviewed the extracted or manually entered receipt details, including subtotal, taxes, discounts, and final total.</span>
+        </label>}
         {message && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline h-4 w-4" />{message}</p>}
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -426,29 +488,41 @@ export const SuppliersReceiptView: React.FC<SuppliersReceiptViewProps> = ({ shop
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold text-slate-600"><tr><th className="p-3">Product Name</th><th className="p-3">Quantity (as on Receipt)</th><th className="p-3">Price per Unit</th><th className="p-3">Line Total</th><th className="p-3">Actions</th></tr></thead>
-              <tbody className="divide-y divide-slate-200">{items.map((item, index) => (
-                <tr key={`${index}-${item.name}`}>
-                  <td className="p-2"><input aria-label="Product Name" required value={item.name} onChange={(event) => updateItem(index, 'name', event.target.value)} placeholder="Product / service" className="w-full rounded-lg border border-slate-300 px-3 py-2" />{item.confidence !== undefined && <small className="text-slate-500">AI confidence {Math.round(item.confidence * 100)}%</small>}</td>
-                  <td className="p-2"><input aria-label="Quantity (as on Receipt)" required value={item.quantityText} onChange={(event) => { setItems((previous) => previous.map((entry, itemIndex) => itemIndex === index ? { ...entry, quantityText: event.target.value, qty: String(Number.parseFloat(event.target.value) || '') } : entry)); }} placeholder="e.g. 2 packets" className="w-full rounded-lg border border-slate-300 px-3 py-2" /></td>
-                  <td className="p-2"><input aria-label="Price per Unit" type="number" min="0" step="0.01" required value={item.unitPrice} onChange={(event) => updateItem(index, 'unitPrice', event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-slate-300 px-3 py-2" /></td>
-                  <td className="p-2"><input aria-label="Line Total" type="number" min="0" step="0.01" required value={item.total} onChange={(event) => updateItem(index, 'total', event.target.value)} placeholder="0.00" className="w-full rounded-lg border border-slate-300 px-3 py-2" /></td>
-                  <td className="p-2"><button type="button" onClick={() => setItems((previous) => previous.filter((_, itemIndex) => itemIndex !== index))} className="text-sm text-red-700 underline">Remove</button></td>
-                </tr>
-              ))}</tbody>
+              <tbody className="divide-y divide-slate-200">{items.map((item, index) => {
+                const lowConfidence = item.confidence !== undefined && item.confidence < 0.75;
+                const missingValue = !item.name.trim() || !item.quantityText.trim() || item.unitPrice === '' || item.total === '';
+                const reviewRequired = lowConfidence || missingValue || (item.confidence !== undefined && !item.reviewed);
+                return (
+                  <tr key={`${index}-${item.name}`} className={reviewRequired ? 'bg-amber-50/70' : ''}>
+                    <td className="p-2"><input aria-label="Product Name" required value={item.name} onChange={(event) => updateItem(index, 'name', event.target.value)} placeholder="Product / service" className={`w-full rounded-lg border px-3 py-2 ${!item.name.trim() ? 'border-amber-400' : 'border-slate-300'}`} />{item.confidence !== undefined && <small className={lowConfidence ? 'text-amber-800' : 'text-slate-500'}>AI confidence {Math.round(item.confidence * 100)}%</small>}{reviewRequired && <small className="block font-semibold text-amber-800">Review required</small>}</td>
+                    <td className="p-2"><input aria-label="Quantity (as on Receipt)" required value={item.quantityText} onChange={(event) => { const quantityText = event.target.value; const qty = Number.parseFloat(quantityText); setItems((previous) => previous.map((entry, itemIndex) => itemIndex === index ? { ...entry, quantityText, qty: Number.isFinite(qty) ? String(qty) : '', total: Number.isFinite(qty) && entry.unitPrice !== '' ? (Math.round(qty * Number(entry.unitPrice) * 100) / 100).toFixed(2) : entry.total } : entry)); }} placeholder="e.g. 2 packets" className={`w-full rounded-lg border px-3 py-2 ${!item.quantityText.trim() ? 'border-amber-400' : 'border-slate-300'}`} /></td>
+                    <td className="p-2"><input aria-label="Price per Unit" type="number" min="0" step="0.01" required value={item.unitPrice} onChange={(event) => updateItem(index, 'unitPrice', event.target.value)} placeholder="0.00" className={`w-full rounded-lg border px-3 py-2 ${item.unitPrice === '' ? 'border-amber-400' : 'border-slate-300'}`} /></td>
+                    <td className="p-2"><input aria-label="Line Total" type="number" min="0" step="0.01" required value={item.total} onChange={(event) => updateItem(index, 'total', event.target.value)} placeholder="0.00" className={`w-full rounded-lg border px-3 py-2 ${item.total === '' ? 'border-amber-400' : 'border-slate-300'}`} /></td>
+                    <td className="p-2"><div className="space-y-2">{item.confidence !== undefined && <button type="button" onClick={() => setItems((previous) => previous.map((entry, itemIndex) => itemIndex === index ? { ...entry, reviewed: !entry.reviewed } : entry))} className="text-xs font-semibold text-emerald-700 underline">{item.reviewed ? 'Line reviewed' : 'Mark line reviewed'}</button>}<button type="button" onClick={() => setItems((previous) => previous.filter((_, itemIndex) => itemIndex !== index))} className="block text-sm text-red-700 underline">Remove</button></div></td>
+                  </tr>
+                );
+              })}</tbody>
             </table>
           </div>
-          {items.length > 0 && <div className={`flex flex-wrap justify-between gap-2 rounded-lg p-3 text-sm ${totalsMismatch ? 'bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-700'}`}><span>Calculated line total: {currency(calculatedTotal)}</span>{totalsMismatch && <span>Printed total differs by {currency(Math.abs(calculatedTotal - Number(total)))}; confirm before saving.</span>}</div>}
+          {items.length > 0 && <div className={`space-y-1 rounded-lg p-3 text-sm ${totalsMismatch || subtotalMismatch || invoiceMathMismatch ? 'bg-amber-50 text-amber-900' : 'bg-slate-50 text-slate-700'}`}>
+            <p>Calculated line value (quantity × price per unit): {currency(calculatedTotal)}</p>
+            <p>Sum of entered line totals: {currency(enteredLinesTotal)}{subtotal ? ` · Printed subtotal: ${currency(Number(subtotal))}` : ''}</p>
+            {subtotalMismatch && <p>Line totals differ from the printed subtotal. Verify before approval.</p>}
+            {itemLineMismatch && <p>At least one line total differs from quantity × unit price. Review any line-level discounts or corrections.</p>}
+            {totalsMismatch && <p>Calculated line value does not reconcile with the printed subtotal or final invoice total. Verify all fields.</p>}
+            {invoiceMathMismatch && <p>Subtotal + taxes − discounts does not match the printed grand total. Verify the receipt before approval.</p>}
+          </div>}
         </div>
 
         <div className="flex flex-col-reverse justify-between gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
           <p className="text-xs text-slate-500">Approval saves the receipt and purchase/payable record. Receipt items are not mapped to inventory or used to change stock.</p>
-          <button disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-3 font-semibold text-white hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"><ReceiptText className="h-4 w-4" />Approve and save</button>
+          <button disabled={busy || Boolean(potentialDuplicate && confirmedPotentialDuplicateId !== potentialDuplicate.id)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#059669] px-5 py-3 font-semibold text-white hover:bg-[#047857] disabled:cursor-not-allowed disabled:opacity-50"><ReceiptText className="h-4 w-4" />Approve and save</button>
         </div>
       </form>
 
       <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
         <h2 className="mb-3 font-semibold text-[#0F172A]">Recent verified receipts</h2>
-        {receipts.length === 0 ? <p className="text-sm text-slate-500">No receipts recorded yet.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b text-xs uppercase text-slate-500"><tr><th className="py-2 pr-4">Supplier</th><th className="py-2 pr-4">Date / invoice</th><th className="py-2 pr-4">Type</th><th className="py-2 pr-4">Paid</th><th className="py-2 text-right">Total</th></tr></thead><tbody className="divide-y">{receipts.map((receipt) => <tr key={receipt.id}><td className="py-3 pr-4 font-medium text-[#0F172A]">{receipt.vendor}</td><td className="py-3 pr-4 text-slate-600">{receipt.date}<span className="block text-xs">{receipt.receiptNumber || receipt.id}</span></td><td className="py-3 pr-4">{receipt.transactionType === 'purchase' ? 'Inventory purchase' : 'Other expense'}</td><td className="py-3 pr-4">{currency(receipt.amountPaid || 0)} · {receipt.paymentStatus}</td><td className="py-3 text-right font-semibold">{currency(receipt.total)}</td></tr>)}</tbody></table></div>}
+        {receipts.length === 0 ? <p className="text-sm text-slate-500">No receipts recorded yet.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b text-xs uppercase text-slate-500"><tr><th className="py-2 pr-4">Supplier</th><th className="py-2 pr-4">Date / invoice</th><th className="py-2 pr-4">Receipt type</th><th className="py-2 pr-4">Transaction</th><th className="py-2 pr-4">Paid</th><th className="py-2 pr-4 text-right">Total</th><th className="py-2 text-right">Original</th></tr></thead><tbody className="divide-y">{receipts.map((receipt) => <tr id={`receipt-${receipt.id}`} key={receipt.id}><td className="py-3 pr-4 font-medium text-[#0F172A]">{receipt.vendor}</td><td className="py-3 pr-4 text-slate-600">{receipt.date}<span className="block text-xs">{receipt.receiptNumber || receipt.id}</span></td><td className="py-3 pr-4">{receipt.type === 'handwritten' ? 'Handwritten' : 'Computer-generated / printed'}</td><td className="py-3 pr-4">{receipt.transactionType === 'purchase' ? 'Supplier purchase' : 'Other expense'}</td><td className="py-3 pr-4">{currency(receipt.amountPaid || 0)} · {receipt.paymentStatus}</td><td className="py-3 pr-4 text-right font-semibold">{currency(receipt.total)}</td><td className="py-3 text-right">{receipt.documentHash && receipt.documentExtension ? <button type="button" onClick={() => void downloadOriginalReceipt(receipt)} className="font-semibold text-emerald-700 underline">Download</button> : '—'}</td></tr>)}</tbody></table></div>}
       </section>
 
       <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5">

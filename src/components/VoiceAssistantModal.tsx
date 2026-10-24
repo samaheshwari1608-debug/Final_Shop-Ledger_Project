@@ -2,16 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Mic, 
-  MicOff, 
   Volume2, 
   VolumeX, 
   Send, 
-  Sparkles, 
   CheckCircle2, 
   Bot, 
-  User,
-  ShoppingBag,
-  ArrowRight
+  User
 } from 'lucide-react';
 interface VoiceAssistantModalProps {
   isOpen: boolean;
@@ -94,7 +90,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       };
 
       recognition.start();
-    } catch (e) {
+    } catch {
       setIsListening(false);
       setMessages((prev) => [...prev, { id: `ai-${Date.now()}`, sender: 'assistant', text: 'Speech recognition could not start. Please type your question in English.' }]);
     }
@@ -200,7 +196,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100"
-              title={soundEnabled ? 'Mute Assistant Voice' : 'Unmute Assistant Voice'}
+              title={soundEnabled ? (isSpeaking ? 'Assistant is speaking' : 'Mute Assistant Voice') : 'Unmute Assistant Voice'}
             >
               {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4" />}
             </button>

@@ -250,7 +250,7 @@ export const AuthFrontPage: React.FC<AuthFrontPageProps> = ({ onLogin, mode: con
                 <div className="grid sm:grid-cols-3 gap-4 pt-2">
                   {[
                     { icon: ShoppingBag, title: 'Smart Billing & Inventory', text: 'Fast billing, stock tracking, and repeat sales visibility.' },
-                    { icon: TrendingUp, title: 'Real-Time Insights', text: 'Profit trends, repeat customers, and margin intelligence.' },
+                    { icon: TrendingUp, title: 'Real-Time Insights', text: 'Sales trends, repeat customers, and margin intelligence.' },
                     { icon: MessageSquareQuote, title: 'AI Recommendations', text: 'Actionable next steps for pricing and inventory planning.' },
                   ].map(({ icon: Icon, title, text }) => (
                     <div key={title} className="rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm">
@@ -263,33 +263,19 @@ export const AuthFrontPage: React.FC<AuthFrontPageProps> = ({ onLogin, mode: con
                   ))}
                 </div>
 
-                <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.8)]">
-                  <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Today</p>
-                      <h3 className="mt-1 text-lg font-bold text-slate-900">Business Snapshot</h3>
-                    </div>
-                    <div className="rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-[10px] font-bold">+18.4%</div>
-                  </div>
-
-                  <div className="mt-5 grid grid-cols-3 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">Sales</p>
-                      <p className="mt-2 text-xl font-black text-slate-900">₹84.2K</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">Profit</p>
-                      <p className="mt-2 text-xl font-black text-slate-900">₹21.7K</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400">Stock</p>
-                      <p className="mt-2 text-xl font-black text-slate-900">94%</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex items-end gap-2 h-24">
-                    {[36, 52, 42, 66, 58, 74, 90].map((height, index) => (
-                      <div key={index} className="flex-1 rounded-t-2xl bg-gradient-to-t from-emerald-500 to-emerald-300" style={{ height: `${height}%` }} />
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.8)]">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Connected business data</p>
+                  <h3 className="mt-1 text-lg font-bold text-slate-900">Insights from your saved records</h3>
+                  <div className="mt-4 space-y-3">
+                    {[
+                      'Sales and expenses update from recorded transactions.',
+                      'Profit estimates use saved product costs and recorded expenses.',
+                      'Each business sees only its own dashboard and records.',
+                    ].map((item) => (
+                      <div key={item} className="flex items-start gap-2.5 text-xs leading-5 text-slate-600">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        <span>{item}</span>
+                      </div>
                     ))}
                   </div>
                 </div>

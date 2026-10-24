@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Download, Plus, Printer, WalletCards, X } from 'lucide-react';
 import { Customer, Employee, ExpenseEntry, PayrollPayment, SupplierPurchase } from '../types';
 import { downloadCsv } from '../utils/csv';
@@ -43,14 +43,20 @@ export const ExpensesPayrollView: React.FC<ExpensesPayrollViewProps> = ({ shopId
   const [expenseCategory, setExpenseCategory] = useState('All categories');
   const [duesFrom, setDuesFrom] = useState('');
   const [duesTo, setDuesTo] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<PayrollPayment | null>(null);
   const [editingEmployeeId, setEditingEmployeeId] = useState('');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const expenseIdempotencyKey = useRef('');
   const [expenseForm, setExpenseForm] = useState({ title: '', category: 'Shop rent', vendor: '', date: new Date().toISOString().slice(0, 10), amount: '', paymentMethod: 'Cash', paymentStatus: 'Paid', referenceNumber: '', notes: '' });
   const [employeeForm, setEmployeeForm] = useState({ name: '', role: 'Staff', phone: '', monthlySalary: '', status: 'Active' });
   const [payForm, setPayForm] = useState({ employeeId: '', period: currentMonth(), bonus: '0', deduction: '0', paymentMethod: 'Bank transfer', referenceNumber: '' });
+
+  useEffect(() => {
+    expenseIdempotencyKey.current = '';
+  }, [expenseForm]);
 
   const loadFinanceData = async () => {
     const [expenseData, payrollData, purchaseData] = await Promise.all([
@@ -88,12 +94,14 @@ export const ExpensesPayrollView: React.FC<ExpensesPayrollViewProps> = ({ shopId
     setStatus('');
     setBusy(true);
     try {
+      if (!expenseIdempotencyKey.current) expenseIdempotencyKey.current = crypto.randomUUID();
       const result = await apiRequest<{ expense: ExpenseEntry }>(`/api/shops/${shopId}/expenses`, token, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': expenseIdempotencyKey.current },
         body: JSON.stringify({ ...expenseForm, amount: Number(expenseForm.amount) }),
       });
       setExpenses((previous) => [result.expense, ...previous]);
+      expenseIdempotencyKey.current = '';
       setExpenseForm({ title: '', category: 'Shop rent', vendor: '', date: new Date().toISOString().slice(0, 10), amount: '', paymentMethod: 'Cash', paymentStatus: 'Paid', referenceNumber: '', notes: '' });
       setStatus('Expense saved.');
     } catch (saveError) {
@@ -168,29 +176,44 @@ export const ExpensesPayrollView: React.FC<ExpensesPayrollViewProps> = ({ shopId
   const supplierDues = filteredPurchases.filter((purchase) => purchase.payable > 0);
   const categoryOptions = Array.from(new Set(expenses.map((expense) => expense.category))).sort();
 
-  const exportExpenses = () => downloadCsv('shopledger-expenses.csv', [
-    ['Expense', 'Category', 'Vendor', 'Date', 'Amount', 'Payment status', 'Payment method', 'Reference', 'Notes'],
+  const exportCsv = async (filename: string, rows: Parameters<typeof downloadCsv>[1]) => {
+    setError('');
+    setStatus('');
+    setExporting(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    try {
+      downloadCsv(filename, rows);
+      setStatus(`${filename} exported.`);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? `CSV export failed: ${exportError.message}` : 'CSV export failed.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportExpenses = () => exportCsv('shopledger-expenses.csv', [
+    ['Expense ID', 'Date', 'Category', 'Description', 'Supplier/payee', 'Amount', 'Payment method', 'Payment status', 'Reference number'],
     ...filteredExpenses.map((expense) => [
-      expense.title, expense.category, expense.vendor, expense.date, expense.amount,
-      expense.paymentStatus || 'Paid', expense.paymentMethod, expense.referenceNumber, expense.notes,
+      expense.id, expense.date, expense.category, expense.title, expense.vendor, expense.amount,
+      expense.paymentMethod, expense.paymentStatus || 'Paid', expense.referenceNumber,
     ]),
   ]);
 
-  const exportDues = () => downloadCsv('shopledger-dues.csv', [
-    ['Type', 'Name', 'Invoice / reference', 'Due date', 'Original amount', 'Amount paid', 'Outstanding balance'],
+  const exportDues = () => exportCsv('shopledger-dues.csv', [
+    ['Record ID', 'Type', 'Customer or supplier name', 'Due date', 'Original amount', 'Amount paid', 'Outstanding balance', 'Status'],
     ...customerDues.map((customer) => [
-      'Customer', customer.name, '', 'Not recorded', 'Not tracked', 'Not tracked', customer.pendingAmount,
+      customer.id, 'Customer', customer.name, 'Not recorded', 'Not tracked', 'Not tracked', customer.pendingAmount, customer.status,
     ]),
     ...supplierDues.map((purchase) => [
-      'Supplier', purchase.supplier, purchase.invoiceNumber, 'Not recorded', purchase.total, purchase.amountPaid, purchase.payable,
+      purchase.id, 'Supplier', purchase.supplier, 'Not recorded', purchase.total, purchase.amountPaid, purchase.payable, purchase.paymentStatus,
     ]),
   ]);
 
   return (
     <section className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-[#0F172A]">Expenses & Payroll</h1>
-        <p className="mt-1 text-sm text-slate-600">Track operating spend and record employee salary payments.</p>
+        <h1 className="text-2xl font-bold text-[#0F172A]">Finance</h1>
+        <p className="mt-1 text-sm text-slate-600">Manage expenses, customer and supplier dues, employees, and payroll in one place.</p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -202,7 +225,7 @@ export const ExpensesPayrollView: React.FC<ExpensesPayrollViewProps> = ({ shopId
       <nav className="flex gap-2" aria-label="Financial management sections">
         <button type="button" onClick={() => setTab('expenses')} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === 'expenses' ? 'bg-[#0F172A] text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}>Expenses</button>
         <button type="button" onClick={() => setTab('dues')} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === 'dues' ? 'bg-[#0F172A] text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}>Dues</button>
-        <button type="button" onClick={() => setTab('payroll')} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === 'payroll' ? 'bg-[#0F172A] text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}>Employees & payroll</button>
+        <button type="button" onClick={() => setTab('payroll')} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === 'payroll' ? 'bg-[#0F172A] text-white' : 'bg-white text-slate-700 ring-1 ring-slate-200'}`}>Employees & Payroll</button>
       </nav>
 
       {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
@@ -229,7 +252,7 @@ export const ExpensesPayrollView: React.FC<ExpensesPayrollViewProps> = ({ shopId
           <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <h2 className="font-semibold text-[#0F172A]">Expenses</h2>
-              <button type="button" onClick={exportExpenses} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" />Export CSV</button>
+              <button type="button" disabled={exporting} onClick={() => void exportExpenses()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download className="h-4 w-4" />{exporting ? 'Exporting…' : 'Export CSV'}</button>
             </div>
             <div className="mb-4 grid gap-3 sm:grid-cols-3">
               <label className="text-xs font-medium text-slate-600">From<input type="date" value={expenseFrom} onChange={(event) => setExpenseFrom(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" /></label>
@@ -242,8 +265,8 @@ export const ExpensesPayrollView: React.FC<ExpensesPayrollViewProps> = ({ shopId
       ) : tab === 'dues' ? (
         <section className="space-y-4 rounded-2xl border border-[#E2E8F0] bg-white p-5">
           <header className="flex flex-wrap items-end justify-between gap-3">
-            <div><h2 className="font-semibold text-[#0F172A]">Outstanding dues</h2><p className="mt-1 text-xs text-slate-500">Customer balances are current totals. Historic customer original/paid amounts are not tracked in this ledger.</p></div>
-            <button type="button" onClick={exportDues} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" />Export dues CSV</button>
+            <div><h2 className="font-semibold text-[#0F172A]">Outstanding dues</h2><p className="mt-1 text-xs text-slate-500">Date filters apply to supplier invoices; customer balances are current totals without transaction-date history.</p><p className="text-xs text-slate-500">Historic customer original/paid amounts and due dates are not tracked in this ledger.</p></div>
+            <button type="button" disabled={exporting} onClick={() => void exportDues()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Download className="h-4 w-4" />{exporting ? 'Exporting…' : 'Export dues CSV'}</button>
           </header>
           <div className="grid max-w-xl gap-3 sm:grid-cols-2">
             <label className="text-xs font-medium text-slate-600">Supplier purchases from<input type="date" value={duesFrom} onChange={(event) => setDuesFrom(event.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-2 text-sm" /></label>

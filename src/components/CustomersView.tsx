@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   Search, 
   Plus, 
@@ -19,7 +19,7 @@ interface CustomersViewProps {
   onOpenAddCustomer: () => void;
   onEditCustomer: (customer: Customer) => void;
   onDeleteCustomer: (customerId: string) => void;
-  onSettlePayment: (customerId: string, amount: number) => void;
+  onSettlePayment: (customerId: string, amount: number, paymentMethod: string, referenceNumber: string, idempotencyKey: string) => Promise<void>;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -32,6 +32,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [settlingCustomer, setSettlingCustomer] = useState<Customer | null>(null);
   const [settleAmount, setSettleAmount] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentError, setPaymentError] = useState('');
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const paymentIdempotencyKey = useRef('');
 
   const filteredCustomers = customers.filter((c) => {
     if (!searchQuery.trim()) return true;
@@ -45,15 +50,28 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
   const totalCreditGiven = customers.reduce((acc, c) => acc + c.pendingAmount, 0);
 
-  const handleSettleSubmit = (e: React.FormEvent) => {
+  const handleSettleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!settlingCustomer) return;
+    if (!settlingCustomer || isSavingPayment) return;
     const amt = parseFloat(settleAmount);
-    if (!isNaN(amt) && amt > 0) {
-      onSettlePayment(settlingCustomer.id, amt);
+    if (!Number.isFinite(amt) || amt <= 0 || amt > settlingCustomer.pendingAmount || !paymentReference.trim()) {
+      setPaymentError('Enter a valid amount within the outstanding balance and a payment reference.');
+      return;
     }
-    setSettlingCustomer(null);
-    setSettleAmount('');
+    setIsSavingPayment(true);
+    setPaymentError('');
+    if (!paymentIdempotencyKey.current) paymentIdempotencyKey.current = crypto.randomUUID();
+    try {
+      await onSettlePayment(settlingCustomer.id, amt, paymentMethod, paymentReference.trim(), paymentIdempotencyKey.current);
+      setSettlingCustomer(null);
+      setSettleAmount('');
+      setPaymentReference('');
+      paymentIdempotencyKey.current = '';
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Could not record customer payment.');
+    } finally {
+      setIsSavingPayment(false);
+    }
   };
 
   return (
@@ -209,6 +227,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                               onClick={() => {
                                 setSettlingCustomer(c);
                                 setSettleAmount(c.pendingAmount.toString());
+                                setPaymentMethod('Cash');
+                                setPaymentReference('');
+                                setPaymentError('');
+                                paymentIdempotencyKey.current = '';
                               }}
                               className="px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors"
                               title="Record payment from customer"
@@ -270,6 +292,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-600"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Payment method</label>
+                <input value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} required className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Reference</label>
+                <input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} required className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900" />
+              </div>
+              {paymentError && <p role="alert" className="text-xs text-red-600">{paymentError}</p>}
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
@@ -281,9 +312,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSavingPayment}
                   className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs"
                 >
-                  Confirm Settle
+                  {isSavingPayment ? 'Saving…' : 'Confirm Settle'}
                 </button>
               </div>
             </form>

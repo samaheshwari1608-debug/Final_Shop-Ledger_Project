@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Upload, Image as ImageIcon, Plus, Check } from 'lucide-react';
 import { Product, ProductCategory } from '../types';
 
 interface AddProductModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddProduct: (product: Product) => void;
+  onAddProduct: (product: Product) => Promise<void>;
   editingProduct?: Product | null;
 }
 
@@ -24,25 +24,41 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   onAddProduct,
   editingProduct,
 }) => {
-  if (!isOpen) return null;
-
   const [name, setName] = useState(editingProduct?.name || '');
   const [category, setCategory] = useState<ProductCategory>(editingProduct?.category || 'Grocery');
   const [purchasePrice, setPurchasePrice] = useState(editingProduct?.purchasePrice?.toString() || '');
   const [sellingPrice, setSellingPrice] = useState(editingProduct?.sellingPrice?.toString() || '');
   const [stock, setStock] = useState(editingProduct?.stock?.toString() || '');
   const [unit, setUnit] = useState(editingProduct?.unit || 'pack');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    setName(editingProduct?.name || '');
+    setCategory(editingProduct?.category || 'Grocery');
+    setPurchasePrice(editingProduct?.purchasePrice?.toString() || '');
+    setSellingPrice(editingProduct?.sellingPrice?.toString() || '');
+    setStock(editingProduct?.stock?.toString() || '');
+    setUnit(editingProduct?.unit || 'pack');
+    setError('');
+  }, [editingProduct, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || isSaving) return;
 
-    const pPrice = parseFloat(purchasePrice) || 0;
-    const sPrice = parseFloat(sellingPrice) || 0;
-    const qty = parseInt(stock, 10) || 0;
+    const pPrice = Number(purchasePrice);
+    const sPrice = Number(sellingPrice);
+    const qty = Number(stock);
+    if (!Number.isFinite(pPrice) || pPrice < 0 || !Number.isFinite(sPrice) || sPrice <= 0 || !Number.isFinite(qty) || qty < 0) {
+      setError('Enter valid non-negative costs and stock, and a positive selling price.');
+      return;
+    }
 
     const newProduct: Product = {
-      id: editingProduct ? editingProduct.id : `p-${Date.now().toString().slice(-4)}`,
+      id: editingProduct ? editingProduct.id : `p-${crypto.randomUUID()}`,
       name: name.trim(),
       category,
       purchasePrice: pPrice,
@@ -52,8 +68,16 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       unit,
     };
 
-    onAddProduct(newProduct);
-    onClose();
+    setIsSaving(true);
+    setError('');
+    try {
+      await onAddProduct(newProduct);
+      onClose();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Product could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -169,12 +193,14 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
             </div>
 
             {/* Green Add Product Submit Button */}
+            {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 mt-2"
+              disabled={isSaving}
+              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 mt-2 disabled:opacity-60"
             >
               <Plus className="w-4 h-4" />
-              <span>{editingProduct ? 'Update Product' : '+ Add Product'}</span>
+              <span>{isSaving ? 'Saving…' : editingProduct ? 'Update Product' : '+ Add Product'}</span>
             </button>
           </div>
 
